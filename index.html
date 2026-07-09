@@ -113,7 +113,10 @@
   .meal .mname{flex:1;font-size:15px}
   .meal .mqty{color:var(--muted);font-size:13px}
   .meal .mvals{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--muted);white-space:nowrap;text-align:right}
-  .meal .del{color:var(--muted);font-size:17px;padding:4px 6px;line-height:1}
+  .meal .edit{color:var(--muted);font-size:15px;padding:4px 6px;line-height:1}
+  .meal .edit:active{color:var(--accent)}
+  .meal .del{color:var(--muted);font-size:19px;padding:4px 8px;line-height:1}
+  .meal .del:active{color:var(--danger)}
   .empty{padding:22px 14px;text-align:center;color:var(--muted);font-size:14px}
 
   /* peso / pasos */
@@ -252,7 +255,7 @@
     <div class="card foodlist" id="foodlist"></div>
     <button class="addcustom" id="openCustom">+ Anotar algo que no está (nombre + kcal)</button>
 
-    <h2>Comido hoy</h2>
+    <h2>Comido hoy — toca ✎ para ajustar cantidad, × para eliminar</h2>
     <div class="card" id="mealLog"></div>
 
     <h2>Mediciones del día</h2>
@@ -339,6 +342,19 @@
   </div>
   <div class="preview" id="qtyPreview"></div>
   <button class="confirm" id="qtyConfirm">Agregar</button>
+</div>
+
+<div class="sheet" id="sheetEdit" role="dialog" aria-modal="true">
+  <h3 id="emName">Comida</h3>
+  <p class="sub">Ajusta los gramos — las calorías y macros se recalculan solos.</p>
+  <div class="qtyrow">
+    <button id="emMinus" aria-label="Menos">−</button>
+    <input id="emGrams" class="qty num" type="number" inputmode="numeric" min="5" max="3000" style="width:110px;text-align:center;border:none;border-bottom:2px solid var(--line);background:transparent">
+    <button id="emPlus" aria-label="Más">+</button>
+  </div>
+  <div class="preview" id="emPreview"></div>
+  <button class="confirm" id="emSave">Guardar cambio</button>
+  <button class="confirm" id="emDelete" style="background:var(--danger-soft);color:var(--danger);margin-top:8px">Eliminar esta comida</button>
 </div>
 
 <div class="sheet" id="sheetCustom" role="dialog" aria-modal="true">
@@ -512,6 +528,81 @@ const RAW = [
  ['Líquidos','Pisco sour',['pisco sour'],'1 vaso (100 ml)',100,190,0,18,0],
  ['Líquidos','Café o té solo',['cafe','te'],'1 taza',240,1,0,0,0,{t:240}],
  ['Líquidos','Café con leche y azúcar',['cafe con leche'],'1 taza (240 ml)',240,25,1.3,4,0.6,{t:240}],
+ // --- Frutas (agregadas 2026-07-08) ---
+ ['Fruta/Verdura','Piña',['pina','ananá'],'1 rodaja (80 g)',80,50,0.5,13,0.1],
+ ['Fruta/Verdura','Mango',['mango'],'1 unidad (200 g)',200,60,0.8,15,0.4],
+ ['Fruta/Verdura','Ciruela',['ciruela'],'1 unidad (66 g)',66,46,0.7,11,0.3],
+ ['Fruta/Verdura','Cerezas',['cerezas','cereza','guindas'],'1 taza (150 g)',150,63,1,16,0.2,{t:150}],
+ ['Fruta/Verdura','Damasco',['damasco','albaricoque'],'1 unidad (35 g)',35,48,1.4,11,0.4],
+ ['Fruta/Verdura','Higo',['higo','higos'],'1 unidad (50 g)',50,74,0.8,19,0.3],
+ ['Fruta/Verdura','Chirimoya',['chirimoya'],'½ unidad (125 g)',125,75,1.6,18,0.7],
+ ['Fruta/Verdura','Frambuesas',['frambuesa','frambuesas'],'1 taza (140 g)',140,52,1.2,12,0.7,{t:140}],
+ ['Fruta/Verdura','Moras',['mora','moras'],'1 taza (140 g)',140,43,1.4,10,0.5,{t:140}],
+ ['Fruta/Verdura','Cranberry / murtilla',['cranberry','murta','murtilla'],'1 taza (140 g)',140,46,0.4,12,0.1,{t:140}],
+ ['Fruta/Verdura','Pomelo',['pomelo','toronja'],'½ unidad (150 g)',150,42,0.8,11,0.1],
+ ['Fruta/Verdura','Palta Hass grande',['palta grande','palta entera'],'1 unidad (200 g pulpa)',200,160,2,8.5,15,{pun:40}],
+ ['Fruta/Verdura','Pasas',['pasas','uvas pasas'],'1 puñado (30 g)',30,300,3,79,0.5,{pun:30}],
+ ['Fruta/Verdura','Dátiles',['datil','datiles'],'2 unidades (24 g)',24,282,2.5,75,0.4],
+ // --- Verduras (agregadas 2026-07-08) ---
+ ['Fruta/Verdura','Espinaca',['espinaca'],'1 taza cruda (30 g)',30,23,2.9,3.6,0.4,{t:30}],
+ ['Fruta/Verdura','Acelga',['acelga'],'1 taza (36 g)',36,19,1.8,3.7,0.2,{t:36}],
+ ['Fruta/Verdura','Pepino',['pepino'],'½ unidad (150 g)',150,15,0.7,3.6,0.1],
+ ['Fruta/Verdura','Apio',['apio'],'1 tallo (40 g)',40,16,0.7,3,0.2],
+ ['Fruta/Verdura','Pimentón',['pimenton','morron'],'1 unidad (120 g)',120,31,1,6,0.3],
+ ['Fruta/Verdura','Coliflor',['coliflor'],'1 taza (100 g)',100,25,1.9,5,0.3,{t:100}],
+ ['Fruta/Verdura','Repollo',['repollo'],'1 taza (89 g)',89,25,1.3,6,0.1,{t:89}],
+ ['Fruta/Verdura','Rúcula',['rucula'],'1 taza (20 g)',20,25,2.6,3.7,0.7,{t:20}],
+ ['Fruta/Verdura','Espárragos',['esparragos'],'5 unidades (100 g)',100,20,2.2,3.9,0.1],
+ ['Fruta/Verdura','Arvejas',['arvejas','arveja'],'1 taza (145 g)',145,81,5,14,0.4,{t:145}],
+ ['Fruta/Verdura','Berenjena',['berenjena'],'1 taza (82 g)',82,25,1,6,0.2,{t:82}],
+ ['Fruta/Verdura','Palmitos',['palmito','palmitos'],'3 unidades (100 g)',100,28,2.5,4.5,0.6],
+ ['Fruta/Verdura','Zapallo camote (butternut)',['zapallo','zapallo camote'],'1 taza (116 g)',116,45,1,12,0.1,{t:116}],
+ ['Fruta/Verdura','Coliflor/brócoli salteado en aceite',['salteado','verduras salteadas'],'1 taza (150 g)',150,70,3,8,3,{t:150}],
+ // --- Restaurant / comer afuera — porciones REALES de local (agregadas 2026-07-08, ojo: más grandes y más aceite que en casa) ---
+ ['Calle','Sushi tempura/frito (roll)',['sushi frito','tempura','roll frito','panko'],'1 roll (280 g)',280,235,7,26,11],
+ ['Calle','Sushi hosomaki (sin queso)',['hosomaki','sushi simple','maki'],'1 roll (150 g)',150,140,4,28,1],
+ ['Calle','Poke bowl',['poke','poke bowl'],'1 bowl (400 g)',400,150,10,18,5],
+ ['Calle','Ramen',['ramen'],'1 plato (500 g)',500,110,6,14,3.5],
+ ['Calle','Lomito completo',['lomito'],'1 unidad (300 g)',300,245,12,17,14],
+ ['Calle','Chorrillana (personal)',['chorrillana'],'1 plato personal (350 g)',350,235,9,18,15],
+ ['Calle','As / churrasco palta-mayo',['as','italiano grande','churrasco palta'],'1 unidad (320 g)',320,260,11,15,17],
+ ['Calle','Pollo broaster con papas',['broaster','pollo frito','pollo broster'],'1 plato (350 g)',350,260,15,22,13],
+ ['Calle','Alitas de pollo BBQ',['alitas','alas de pollo'],'6 unidades (300 g)',300,215,18,7,13],
+ ['Calle','Papas fritas grandes (local)',['papas grandes','papas fritas local','papas fritas grandes'],'1 porción grande (250 g)',250,312,4,40,15],
+ ['Calle','Pizza familiar (trozo grande)',['pizza grande','pizza familiar'],'1 trozo grande (150 g)',150,260,10,30,11],
+ ['Calle','Empanada napolitana',['empanada napolitana','empanada de horno grande'],'1 unidad (250 g)',250,260,10,28,12],
+ ['Calle','Sándwich de mechada',['mechada','sandwich mechada','sanguche mechada'],'1 unidad (300 g)',300,230,14,18,11],
+ ['Calle','Hamburguesa doble (local)',['hamburguesa doble','doble queso','hamburguesa local'],'1 unidad (280 g)',280,290,15,22,17],
+ ['Calle','Tacos',['tacos','taco'],'2 unidades (200 g)',200,210,9,20,10],
+ ['Calle','Burrito',['burrito'],'1 unidad (330 g)',330,215,9,25,9],
+ ['Calle','Sopaipilla pasada',['sopaipilla pasada','sopaipillas pasadas'],'1 unidad (90 g)',90,200,2,32,7],
+ ['Calle','Ensalada de local (con aderezo)',['ensalada local','ensalada con aderezo','ensalada de local','ensalada de restaurant'],'1 plato (350 g)',350,120,6,10,7],
+ ['Calle','Papa rellena',['papa rellena'],'1 unidad (250 g)',250,190,6,26,7],
+ ['Calle','Machas a la parmesana',['machas','machas parmesana'],'1 porción (200 g)',200,180,12,6,11],
+ ['Calle','Salmón grillado (restaurant)',['salmon restaurant','salmon grillado'],'1 porción (200 g)',200,210,22,2,13],
+ ['Calle','Pichanga (para picar)',['pichanga'],'1 porción personal (250 g)',250,250,10,12,18],
+ // --- Tragos y bebidas (agregadas 2026-07-08) ---
+ ['Líquidos','Schop (cerveza de barril)',['schop','shop','cerveza barril'],'1 schop (500 ml)',500,42,0.4,3.5,0],
+ ['Líquidos','Cerveza artesanal / IPA',['ipa','cerveza artesanal','artesanal'],'1 botella (330 ml)',330,55,0.5,5,0],
+ ['Líquidos','Michelada',['michelada'],'1 vaso (400 ml)',400,50,0.5,6,0],
+ ['Líquidos','Ron cola',['ron cola','roncola','ron con coca'],'1 vaso (300 ml)',300,75,0,8,0],
+ ['Líquidos','Gin tonic',['gin tonic','gintonic'],'1 vaso (250 ml)',250,80,0,7,0],
+ ['Líquidos','Trago corto (vodka/whisky/ron/pisco solo)',['vodka','whisky','ron','shot','trago corto','destilado'],'1 medida (45 ml)',45,245,0,0,0],
+ ['Líquidos','Mojito',['mojito'],'1 vaso (250 ml)',250,90,0,14,0],
+ ['Líquidos','Margarita',['margarita'],'1 vaso (200 ml)',200,140,0,18,0],
+ ['Líquidos','Terremoto',['terremoto'],'1 vaso (300 ml)',300,110,0,20,0],
+ ['Líquidos','Jote / vino con bebida',['jote','vino con coca'],'1 vaso (250 ml)',250,80,0,10,0],
+ ['Líquidos','Malta',['malta'],'1 botella (330 ml)',330,50,0.5,11,0],
+ ['Líquidos','Bebida energética',['energetica','red bull','monster'],'1 lata (250 ml)',250,45,0,11,0],
+ ['Líquidos','Jugo natural exprimido',['jugo natural','exprimido','jugo de naranja'],'1 vaso (250 ml)',250,45,0.7,11,0.2,{t:250}],
+ ['Líquidos','Té helado / bebida sabor',['te helado','ice tea','jugo en polvo'],'1 vaso (250 ml)',250,30,0,8,0],
+ ['Líquidos','Agua mineral con gas',['agua con gas','soda','mineral'],'1 vaso (250 ml)',250,0,0,0,0,{t:250}],
+ // --- Dulces extra (agregadas 2026-07-08) ---
+ ['Dulces y snacks','Alfajor',['alfajor'],'1 unidad (50 g)',50,420,5,60,18],
+ ['Dulces y snacks','Brownie',['brownie'],'1 trozo (60 g)',60,420,5,50,22],
+ ['Dulces y snacks','Cuchuflí',['cuchufli'],'1 unidad (15 g)',15,470,5,62,22],
+ ['Dulces y snacks','Empanada de manzana',['empanada de manzana','empanada dulce'],'1 unidad (90 g)',90,320,3,45,14],
+ ['Dulces y snacks','Helado de canasto (cono)',['cono','helado cono','barquillo'],'1 unidad (110 g)',110,190,3.5,25,9],
 ];
 const FOODS = RAW.map(r => ({c:r[0], n:r[1], s:r[2]||[], u:r[3], pg:r[4], m:[r[5],r[6],r[7],r[8]], x:r[9]||{}}));
 
@@ -744,7 +835,7 @@ function confirmParse(){
   pending.forEach(it=>{
     if (!it.f) return;
     const m = macrosFor(it.f, it.grams);
-    D.meals.push({id: genId(), t: now(), n: it.f.n, q: it.grams+' g', k: Math.round(m.k), p: Math.round(m.p*10)/10, cb: Math.round(m.cb), ft: Math.round(m.ft)});
+    D.meals.push({id: genId(), t: now(), n: it.f.n, q: it.grams+' g', g: it.grams, k: Math.round(m.k), p: Math.round(m.p*10)/10, cb: Math.round(m.cb), ft: Math.round(m.ft)});
     added.k+=m.k; added.p+=m.p; added.cb+=m.cb; added.ft+=m.ft; n++;
   });
   if (n) touch(D);
@@ -815,16 +906,65 @@ function renderLog(){
     const row = document.createElement('div');
     row.className = 'meal';
     const macro = (m.cb!=null) ? fmt(m.k)+' kcal<br>'+fmt(m.p)+'P '+fmt(m.cb)+'C '+fmt(m.ft)+'G' : fmt(m.k)+' kcal · '+fmt1(m.p)+' P';
+    const editable = (typeof m.g === 'number' && m.g > 0);
     row.innerHTML = '<span class="time num">'+esc(m.t)+'</span>'
       + '<span class="mname">'+esc(m.n)+' <span class="mqty">'+esc(m.q||'')+'</span></span>'
       + '<span class="mvals">'+macro+'</span>';
+    if (editable){
+      const ed = document.createElement('button');
+      ed.className = 'edit'; ed.textContent = '✎'; ed.setAttribute('aria-label','Editar cantidad de '+m.n);
+      ed.onclick = ()=>openEditMeal(i);
+      row.appendChild(ed);
+    }
     const del = document.createElement('button');
-    del.className = 'del'; del.textContent = '×'; del.setAttribute('aria-label','Borrar '+m.n);
-    del.onclick = ()=>{ markDeleted(D.meals[i]); D.meals.splice(i,1); touch(D); save(); renderAll(); };
+    del.className = 'del'; del.textContent = '×'; del.setAttribute('aria-label','Eliminar '+m.n);
+    del.onclick = ()=>{ if(confirm('¿Eliminar "'+m.n+'"?')){ markDeleted(D.meals[i]); D.meals.splice(i,1); touch(D); save(); renderAll(); } };
     row.appendChild(del);
     el.appendChild(row);
   });
 }
+
+/* ============ editar una comida ya registrada (cambiar cantidad) ============
+   Edición = reemplazo (tombstone al viejo id + comida nueva) para que el cambio se propague bien por sync. */
+let editIdx = null, editGrams = 0;
+function openEditMeal(i){
+  const m = day(currentKey).meals[i];
+  if (!m || typeof m.g !== 'number') return;
+  editIdx = i; editGrams = m.g;
+  document.getElementById('emName').textContent = m.n;
+  updateEditUI();
+  openSheet('sheetEdit');
+}
+function editScaled(){
+  const m = day(currentKey).meals[editIdx];
+  const s = editGrams / m.g;
+  return { k: m.k*s, p: m.p*s, cb: (m.cb||0)*s, ft: (m.ft||0)*s };
+}
+function updateEditUI(){
+  document.getElementById('emGrams').value = editGrams;
+  const r = editScaled();
+  document.getElementById('emPreview').textContent = '= '+fmt(r.k)+' kcal · '+fmt(r.p)+' P · '+fmt(r.cb)+' C · '+fmt(r.ft)+' G';
+}
+document.getElementById('emMinus').onclick = ()=>{ editGrams = Math.max(5, editGrams-10); updateEditUI(); };
+document.getElementById('emPlus').onclick  = ()=>{ editGrams = Math.min(3000, editGrams+10); updateEditUI(); };
+document.getElementById('emGrams').addEventListener('input', e=>{ const v=parseInt(e.target.value,10); if(isFinite(v)&&v>0){ editGrams=v; const r=editScaled(); document.getElementById('emPreview').textContent='= '+fmt(r.k)+' kcal · '+fmt(r.p)+' P · '+fmt(r.cb)+' C · '+fmt(r.ft)+' G'; } });
+document.getElementById('emSave').onclick = ()=>{
+  const D = day(currentKey);
+  const old = D.meals[editIdx];
+  if (!old){ closeSheets(); return; }
+  const r = editScaled();
+  markDeleted(old);
+  D.meals.splice(editIdx, 1);
+  D.meals.push({id:genId(), t:old.t, n:old.n, q:Math.round(editGrams)+' g', g:Math.round(editGrams), k:Math.round(r.k), p:Math.round(r.p*10)/10, cb:Math.round(r.cb), ft:Math.round(r.ft)});
+  D.meals.sort((a,b)=>(a.t||'').localeCompare(b.t||''));
+  touch(D); save(); closeSheets(); renderAll();
+};
+document.getElementById('emDelete').onclick = ()=>{
+  const D = day(currentKey);
+  const old = D.meals[editIdx];
+  if (old){ markDeleted(old); D.meals.splice(editIdx,1); touch(D); save(); }
+  closeSheets(); renderAll();
+};
 
 /* ============ peso y pasos ============ */
 function renderMetrics(){
@@ -906,7 +1046,7 @@ document.getElementById('qtyConfirm').onclick = ()=>{
   if (g<=0){ closeSheets(); return; }
   const m = macrosFor(sheetFood, g);
   const D = day(currentKey);
-  D.meals.push({id:genId(), t:now(), n:sheetFood.n, q:Math.round(g)+' g', k:Math.round(m.k), p:Math.round(m.p*10)/10, cb:Math.round(m.cb), ft:Math.round(m.ft)});
+  D.meals.push({id:genId(), t:now(), n:sheetFood.n, q:Math.round(g)+' g', g:Math.round(g), k:Math.round(m.k), p:Math.round(m.p*10)/10, cb:Math.round(m.cb), ft:Math.round(m.ft)});
   touch(D);
   save(); closeSheets(); renderAll();
   document.getElementById('q').value=''; renderFoods();
