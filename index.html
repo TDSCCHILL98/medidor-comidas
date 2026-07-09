@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2E7D52">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.github.com; manifest-src 'self'">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Medidor">
@@ -369,6 +370,14 @@
   </div>
   <div class="formrow"><label for="sSteps">meta de pasos</label><input id="sSteps" type="number" inputmode="numeric" min="2000" max="30000"></div>
   <p class="sub" style="margin-top:4px">Piso duro: 1.500 kcal. Bajo eso, no sin profesional.</p>
+  <h3 style="margin-top:14px">Sincronización con GitHub</h3>
+  <p class="sub">Sube tus datos al repo privado <b>medidor-datos</b> (y trae los de tus otros dispositivos) para que Norte esté siempre al día. El token se guarda SOLO en este dispositivo — nunca viaja en los datos. <b>Usa un token fine-grained con acceso ÚNICAMENTE a medidor-datos (Contents: Read/Write)</b> — jamás un token classic ni uno con más repos.</p>
+  <div class="form2">
+    <div class="formrow"><label for="syDev">este dispositivo</label><input id="syDev" placeholder="celu / mac" autocomplete="off"></div>
+    <div class="formrow"><label for="syTok">token (github_pat_…)</label><input id="syTok" type="password" placeholder="pegar token" autocomplete="off"></div>
+  </div>
+  <button class="confirm" id="syncNow" style="background:var(--ink);color:var(--bg);margin-bottom:10px">Sincronizar ahora</button>
+  <p class="sub" id="syncStatus" style="margin:0 0 10px"></p>
   <button class="confirm" id="settingsConfirm">Guardar</button>
 </div>
 
@@ -606,7 +615,7 @@ function load(){
   if (!s.custom) s.custom = [];
   return s;
 }
-function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); schedulePush(); }
 function day(key){
   if(!state.days[key]) state.days[key] = {meals:[], weight:null, steps:null};
   return state.days[key];
@@ -643,6 +652,9 @@ function lastNDays(n){
 /* ============ formato ============ */
 const fmt = n => Math.round(n).toLocaleString('es-CL');
 const fmt1 = n => (Math.round(n*10)/10).toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:1});
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const genId = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function markDeleted(m){ state.deleted = state.deleted || {}; state.deleted[keyOf(m)] = new Date().toISOString(); }
 function macroStr(m){ return fmt(m.k)+' kcal / '+fmt(m.p)+' P / '+fmt(m.cb)+' C / '+fmt(m.ft)+' G'; }
 
 /* ============ header ============ */
@@ -686,12 +698,12 @@ function renderParse(){
   pending.forEach((it,i)=>{
     if (it.f){
       const m = macrosFor(it.f, it.grams);
-      html += '<div class="pitem"><span class="pname">'+it.f.n+'<small>'+it.note+'</small></span>'
+      html += '<div class="pitem"><span class="pname">'+esc(it.f.n)+'<small>'+esc(it.note)+'</small></span>'
         + '<input class="pg num" type="number" inputmode="numeric" min="1" max="3000" value="'+it.grams+'" data-i="'+i+'" aria-label="gramos"> <span style="color:var(--muted);font-size:12px">g</span>'
         + '<span class="pkcal">'+fmt(m.k)+' kcal<br>'+fmt(m.p)+'P '+fmt(m.cb)+'C '+fmt(m.ft)+'G</span>'
         + '<button class="del" data-del="'+i+'" aria-label="Quitar">×</button></div>';
     } else {
-      html += '<div class="pitem unk"><span class="pname">No conozco "'+it.raw+'"<small>Anótala manual (botón de abajo) o pídesela a Norte</small></span>'
+      html += '<div class="pitem unk"><span class="pname">No conozco "'+esc(it.raw)+'"<small>Anótala manual (botón de abajo) o pídesela a Norte</small></span>'
         + '<button class="del" data-del="'+i+'" aria-label="Quitar">×</button></div>';
     }
   });
@@ -732,9 +744,10 @@ function confirmParse(){
   pending.forEach(it=>{
     if (!it.f) return;
     const m = macrosFor(it.f, it.grams);
-    D.meals.push({t: now(), n: it.f.n, q: it.grams+' g', k: Math.round(m.k), p: Math.round(m.p*10)/10, cb: Math.round(m.cb), ft: Math.round(m.ft)});
+    D.meals.push({id: genId(), t: now(), n: it.f.n, q: it.grams+' g', k: Math.round(m.k), p: Math.round(m.p*10)/10, cb: Math.round(m.cb), ft: Math.round(m.ft)});
     added.k+=m.k; added.p+=m.p; added.cb+=m.cb; added.ft+=m.ft; n++;
   });
+  if (n) touch(D);
   const skipped = pending.filter(i=>!i.f).length;
   save(); cancelParse();
   document.getElementById('chatIn').value = '';
@@ -782,7 +795,7 @@ function renderFoods(){
     const b = document.createElement('button');
     b.className = 'food';
     const pk = f.m[0]*f.pg/100, pp = f.m[1]*f.pg/100;
-    b.innerHTML = '<span><span class="fname">'+f.n+'</span><br><span class="fportion">'+f.u+'</span></span>'
+    b.innerHTML = '<span><span class="fname">'+esc(f.n)+'</span><br><span class="fportion">'+esc(f.u)+'</span></span>'
       + '<span class="fkcal">'+fmt(pk)+' kcal · '+fmt1(pp)+' P</span>';
     b.onclick = ()=>openQty(f);
     el.appendChild(b);
@@ -802,12 +815,12 @@ function renderLog(){
     const row = document.createElement('div');
     row.className = 'meal';
     const macro = (m.cb!=null) ? fmt(m.k)+' kcal<br>'+fmt(m.p)+'P '+fmt(m.cb)+'C '+fmt(m.ft)+'G' : fmt(m.k)+' kcal · '+fmt1(m.p)+' P';
-    row.innerHTML = '<span class="time num">'+m.t+'</span>'
-      + '<span class="mname">'+m.n+' <span class="mqty">'+(m.q||'')+'</span></span>'
+    row.innerHTML = '<span class="time num">'+esc(m.t)+'</span>'
+      + '<span class="mname">'+esc(m.n)+' <span class="mqty">'+esc(m.q||'')+'</span></span>'
       + '<span class="mvals">'+macro+'</span>';
     const del = document.createElement('button');
     del.className = 'del'; del.textContent = '×'; del.setAttribute('aria-label','Borrar '+m.n);
-    del.onclick = ()=>{ D.meals.splice(i,1); save(); renderAll(); };
+    del.onclick = ()=>{ markDeleted(D.meals[i]); D.meals.splice(i,1); touch(D); save(); renderAll(); };
     row.appendChild(del);
     el.appendChild(row);
   });
@@ -824,17 +837,19 @@ function renderMetrics(){
     b.querySelector('.st').textContent = D[prop] ? '✓' : '○';
   });
 }
-document.getElementById('kbBtn').onclick = ()=>{ const D = day(currentKey); D.kb = !D.kb; save(); renderMetrics(); };
-document.getElementById('gymBtn').onclick = ()=>{ const D = day(currentKey); D.gym = !D.gym; save(); renderMetrics(); };
+document.getElementById('kbBtn').onclick = ()=>{ const D = day(currentKey); D.kb = !D.kb; touch(D); save(); renderMetrics(); };
+document.getElementById('gymBtn').onclick = ()=>{ const D = day(currentKey); D.gym = !D.gym; touch(D); save(); renderMetrics(); };
 document.getElementById('weightIn').addEventListener('change', e=>{
   const v = parseFloat(e.target.value);
-  day(currentKey).weight = isFinite(v) && v>0 ? v : null;
-  save();
+  const D = day(currentKey);
+  D.weight = isFinite(v) && v>0 ? v : null;
+  touch(D); save();
 });
 document.getElementById('stepsIn').addEventListener('change', e=>{
   const v = parseInt(e.target.value,10);
-  day(currentKey).steps = isFinite(v) && v>0 ? v : null;
-  save();
+  const D = day(currentKey);
+  D.steps = isFinite(v) && v>0 ? v : null;
+  touch(D); save();
 });
 
 /* ============ sheet: cantidad ============ */
@@ -890,7 +905,9 @@ document.getElementById('qtyConfirm').onclick = ()=>{
   const g = sheetGrams();
   if (g<=0){ closeSheets(); return; }
   const m = macrosFor(sheetFood, g);
-  day(currentKey).meals.push({t:now(), n:sheetFood.n, q:Math.round(g)+' g', k:Math.round(m.k), p:Math.round(m.p*10)/10, cb:Math.round(m.cb), ft:Math.round(m.ft)});
+  const D = day(currentKey);
+  D.meals.push({id:genId(), t:now(), n:sheetFood.n, q:Math.round(g)+' g', k:Math.round(m.k), p:Math.round(m.p*10)/10, cb:Math.round(m.cb), ft:Math.round(m.ft)});
+  touch(D);
   save(); closeSheets(); renderAll();
   document.getElementById('q').value=''; renderFoods();
 };
@@ -908,7 +925,9 @@ document.getElementById('customConfirm').onclick = ()=>{
   const cb = parseFloat(document.getElementById('cCarb').value)||0;
   const ft = parseFloat(document.getElementById('cFat').value)||0;
   if (!n || k<=0) return;
-  day(currentKey).meals.push({t:now(), n, q:'', k, p, cb, ft});
+  const D = day(currentKey);
+  D.meals.push({id:genId(), t:now(), n, q:'', k, p, cb, ft});
+  touch(D);
   if (document.getElementById('cSave').checked){
     state.custom.push({n, s:[], u:'1 porción', pg:100, m:[k,p,cb,ft]});
   }
@@ -923,6 +942,10 @@ document.getElementById('openSettings').onclick = ()=>{
   document.getElementById('sCarb').value = S.carbs;
   document.getElementById('sFat').value = S.fat;
   document.getElementById('sSteps').value = S.steps;
+  document.getElementById('syDev').value = syncCfg.device || '';
+  document.getElementById('syTok').value = '';
+  document.getElementById('syTok').placeholder = syncCfg.token ? 'token guardado ✓ (pegar otro para cambiarlo)' : 'pegar token';
+  setSyncStatus(syncCfg.token ? 'Sync configurado en este dispositivo.' : 'Sin configurar: crea el token y pégalo aquí.');
   openSheet('sheetSettings');
 };
 document.getElementById('settingsConfirm').onclick = ()=>{
@@ -937,6 +960,10 @@ document.getElementById('settingsConfirm').onclick = ()=>{
   if (isFinite(cb) && cb>0) S.carbs = cb;
   if (isFinite(ft) && ft>0) S.fat = ft;
   if (isFinite(st) && st>0) S.steps = st;
+  syncCfg.device = document.getElementById('syDev').value.trim() || syncCfg.device;
+  const tok = document.getElementById('syTok').value.trim();
+  if (tok) syncCfg.token = tok;
+  saveSyncCfg();
   save(); closeSheets(); renderAll();
 };
 
@@ -1121,6 +1148,147 @@ document.getElementById('copyWeek').onclick = e=>{
   copyText(e.target, parts.length ? parts.join('\n\n') : 'Semana sin registros.');
 };
 
+/* ============ sincronización GitHub (repo privado medidor-datos) ============
+   El token vive SOLO en este dispositivo (clave localStorage aparte, jamás dentro del payload).
+   Cada dispositivo sube su archivo data/<dispositivo>.json; al abrir, trae y fusiona los de los demás. */
+const SYNC_KEY = 'medidor-sync-v1';
+const DATA_API = 'https://api.github.com/repos/TDSCCHILL98/medidor-datos/contents/data';
+let syncCfg = {device:'', token:''};
+try{ syncCfg = Object.assign(syncCfg, JSON.parse(localStorage.getItem(SYNC_KEY)) || {}); }catch(e){}
+function saveSyncCfg(){ localStorage.setItem(SYNC_KEY, JSON.stringify(syncCfg)); }
+function b64e(s){ const b = new TextEncoder().encode(s); let out=''; for (let i=0;i<b.length;i++) out += String.fromCharCode(b[i]); return btoa(out); }
+function b64d(s){ const bin = atob(s.replace(/[\r\n]/g,'')); const b = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) b[i]=bin.charCodeAt(i); return new TextDecoder().decode(b); }
+/*==SYNC-CORE-START==*/
+/* Cada comida lleva id único; los borrados dejan tombstone (state.deleted) que viaja en el payload
+   y se aplica al fusionar → un borrado en un dispositivo se propaga a todos y nada "resucita".
+   Escalares del día (peso/pasos/kb/gym): gana el día con `upd` más nuevo (last-writer-wins).
+   settings viajan solo para que Norte las lea — entre dispositivos NO se fusionan (las metas las fija el protocolo). */
+function keyOf(m){ return m.id || ((m.t||'')+'|'+(m.n||'')+'|'+(m.k||0)); }
+function touch(D){ D.upd = new Date().toISOString(); }
+function syncPayload(st){
+  const cutoff = new Date(Date.now() - 60*86400000).toISOString();
+  const deleted = {};
+  for (const k of Object.keys(st.deleted||{})){ if (st.deleted[k] >= cutoff) deleted[k] = st.deleted[k]; }
+  return { v:3, updated: new Date().toISOString(),
+    days: st.days, custom: st.custom, deleted,
+    settings: {kcal:st.settings.kcal, prot:st.settings.prot, carbs:st.settings.carbs, fat:st.settings.fat, steps:st.settings.steps} };
+}
+function mergeRemote(st, remote){
+  if (!remote || !remote.days) return 0;
+  let merged = 0;
+  st.deleted = st.deleted || {};
+  for (const k of Object.keys(remote.deleted||{})){
+    if (!st.deleted[k]){ st.deleted[k] = remote.deleted[k]; merged++; }
+  }
+  for (const k of Object.keys(remote.days)){
+    const R = remote.days[k];
+    if (!R || !Array.isArray(R.meals)) continue;
+    if (!st.days[k]) st.days[k] = {meals:[], weight:null, steps:null};
+    const L = st.days[k];
+    const seen = new Set((L.meals||[]).map(keyOf));
+    R.meals.forEach(m=>{ const id = keyOf(m); if(!seen.has(id) && !st.deleted[id]){ L.meals.push(m); seen.add(id); merged++; } });
+    if (R.upd && (!L.upd || R.upd > L.upd)){
+      ['weight','steps','kb','gym'].forEach(f=>{
+        const rv = (R[f] === undefined) ? null : R[f];
+        if (L[f] !== rv){ L[f] = rv; merged++; }
+      });
+      L.upd = R.upd;
+    } else if (!L.upd && !R.upd){
+      ['weight','steps'].forEach(f=>{ if(L[f]==null && R[f]!=null){ L[f]=R[f]; merged++; } });
+      ['kb','gym'].forEach(f=>{ if(!L[f] && R[f]){ L[f]=true; merged++; } });
+    }
+    L.meals.sort((a,b)=>(a.t||'').localeCompare(b.t||''));
+  }
+  for (const k of Object.keys(st.days)){
+    const D = st.days[k];
+    if (!Array.isArray(D.meals)) continue;
+    const before = D.meals.length;
+    D.meals = D.meals.filter(m => !st.deleted[keyOf(m)]);
+    merged += before - D.meals.length;
+  }
+  const names = new Set((st.custom||[]).map(c=>c.n));
+  (remote.custom||[]).forEach(c=>{ if(c && c.n && !names.has(c.n)){ st.custom.push(c); names.add(c.n); merged++; } });
+  return merged;
+}
+/*==SYNC-CORE-END==*/
+async function gh(path, opts){
+  const r = await fetch(DATA_API+path, Object.assign({}, opts, {headers: Object.assign({
+    'Authorization': 'Bearer '+syncCfg.token,
+    'Accept': 'application/vnd.github+json'
+  }, (opts && opts.headers) || {})}));
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('GitHub HTTP '+r.status);
+  return r.json();
+}
+let pushTimer = null, syncBusy = false, pushRetry = 0;
+function schedulePush(){
+  if (!syncCfg.token || !syncCfg.device) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(runScheduledPush, 6000);
+}
+async function runScheduledPush(){
+  try{
+    const pushed = await pushSync();
+    if (!pushed){ schedulePush(); return; }
+    pushRetry = 0;
+  }catch(e){
+    if (++pushRetry <= 2){ setSyncStatus('Push falló ('+e.message+') — reintentando…', true); schedulePush(); }
+    else { pushRetry = 0; setSyncStatus('Push falló: '+e.message+' — quedó pendiente hasta el próximo cambio o apertura.', true); }
+  }
+}
+async function pushSync(){
+  if (!syncCfg.token || !syncCfg.device || syncBusy) return false;
+  syncBusy = true;
+  try{
+    const path = '/'+encodeURIComponent(syncCfg.device)+'.json';
+    const cur = await gh(path);
+    const body = { message: 'sync '+syncCfg.device, content: b64e(JSON.stringify(syncPayload(state))) };
+    if (cur && cur.sha) body.sha = cur.sha;
+    await gh(path, {method:'PUT', body: JSON.stringify(body)});
+    setSyncStatus('Subido ✓ ('+syncCfg.device+')');
+    return true;
+  } finally { syncBusy = false; }
+}
+async function pullSync(){
+  if (!syncCfg.token) return 0;
+  const list = await gh('');
+  if (!Array.isArray(list)) return 0;
+  let merged = 0;
+  for (const f of list){
+    if (!f.name || !f.name.endsWith('.json')) continue;
+    if (syncCfg.device && f.name === syncCfg.device+'.json') continue; // el archivo propio no se re-importa (evita resucitar borrados pre-push)
+    const file = await gh('/'+encodeURIComponent(f.name));
+    if (!file || !file.content) continue;
+    try{ merged += mergeRemote(state, JSON.parse(b64d(file.content))); }catch(e){}
+  }
+  if (merged){ localStorage.setItem(KEY, JSON.stringify(state)); renderAll(); }
+  return merged;
+}
+function setSyncStatus(msg, err){
+  const el = document.getElementById('syncStatus');
+  if (el){ el.textContent = msg; el.style.color = err ? 'var(--danger)' : 'var(--muted)'; }
+}
+async function syncNow(){
+  if (!syncCfg.token || !syncCfg.device){ setSyncStatus('Falta el token o el nombre del dispositivo.', true); return; }
+  setSyncStatus('Sincronizando…');
+  try{
+    const m = await pullSync();
+    let pushed = await pushSync();
+    if (!pushed){ await new Promise(r=>setTimeout(r,600)); pushed = await pushSync(); }
+    if (!pushed){ schedulePush(); setSyncStatus('Pull listo; push ocupado — reintento programado.'); return; }
+    setSyncStatus('Sincronizado ✓'+(m ? ' — '+m+' cambios traídos de otros dispositivos' : ''));
+  }catch(e){
+    setSyncStatus('Error: '+e.message+' — ¿token vigente y con acceso a medidor-datos?', true);
+  }
+}
+document.getElementById('syncNow').onclick = ()=>{
+  syncCfg.device = document.getElementById('syDev').value.trim() || syncCfg.device;
+  const tok = document.getElementById('syTok').value.trim();
+  if (tok) syncCfg.token = tok;
+  saveSyncCfg();
+  syncNow();
+};
+
 /* ============ tabs ============ */
 const tabHoy = document.getElementById('tabHoy'), tabPanel = document.getElementById('tabPanel');
 tabHoy.onclick = ()=>{
@@ -1143,6 +1311,7 @@ document.getElementById('prevDay').onclick = ()=>shiftDay(-1);
 document.getElementById('nextDay').onclick = ()=>shiftDay(1);
 function renderAll(){ renderHeader(); renderLog(); renderMetrics(); if(!document.getElementById('viewPanel').hidden) renderPanel(); }
 renderChips(); renderFoods(); renderAll();
+if (syncCfg.token){ pullSync().then(()=>schedulePush()).catch(()=>{}); }
 
 /* PWA: solo cuando corre servida por http(s); en file:// no hace nada */
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
