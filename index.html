@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Medidor de Comidas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2E7D52">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Medidor">
+<style>
+  :root{
+    --bg:#F6F5F0; --surface:#FFFFFF; --surface2:#EDECE4;
+    --ink:#20241F; --muted:#6B7265; --line:#DEDDD2;
+    --accent:#2E7D52; --accent-soft:#E2EEE6; --danger:#C24A33; --danger-soft:#F6E3DE;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#141714; --surface:#1D211D; --surface2:#262B26;
+      --ink:#E8EAE2; --muted:#98A092; --line:#333A33;
+      --accent:#5CBA8C; --accent-soft:#20362A; --danger:#E08066; --danger-soft:#3A2620;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#141714; --surface:#1D211D; --surface2:#262B26;
+    --ink:#E8EAE2; --muted:#98A092; --line:#333A33;
+    --accent:#5CBA8C; --accent-soft:#20362A; --danger:#E08066; --danger-soft:#3A2620;
+  }
+  :root[data-theme="light"]{
+    --bg:#F6F5F0; --surface:#FFFFFF; --surface2:#EDECE4;
+    --ink:#20241F; --muted:#6B7265; --line:#DEDDD2;
+    --accent:#2E7D52; --accent-soft:#E2EEE6; --danger:#C24A33; --danger-soft:#F6E3DE;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font:16px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:540px;margin:0 auto;padding:0 14px calc(84px + env(safe-area-inset-bottom))}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0}
+  button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+  input{font:inherit;color:var(--ink)}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ---------- header / resumen ---------- */
+  header{position:sticky;top:0;z-index:20;background:var(--bg);padding:10px 0 12px;border-bottom:1px solid var(--line)}
+  .daynav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+  .daynav .date{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+  .daynav button{width:38px;height:32px;border-radius:8px;background:var(--surface2);font-size:16px;line-height:1}
+  .daynav button:disabled{opacity:.35;cursor:default}
+  .remain{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .remain .big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:44px;font-weight:700;letter-spacing:-.02em;line-height:1}
+  .remain .big.over{color:var(--danger)}
+  .remain .lbl{font-size:14px;color:var(--muted)}
+  .bars{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+  .bar{display:grid;grid-template-columns:64px 1fr 110px;align-items:center;gap:10px;font-size:12.5px}
+  .bar .tag{text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+  .track{height:8px;border-radius:4px;background:var(--surface2);overflow:hidden}
+  .fill{height:100%;border-radius:4px;background:var(--accent);transition:width .25s ease}
+  @media (prefers-reduced-motion: reduce){ .fill{transition:none} .sheet{transition:none} }
+  .fill.kcal{background:var(--ink)}
+  .fill.over{background:var(--danger)}
+  .bar .val{text-align:right;color:var(--muted)}
+
+  /* ---------- secciones ---------- */
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:22px 0 10px;font-weight:700}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+
+  /* buscador */
+  .search{display:flex;gap:8px;margin-top:16px}
+  .search input{flex:1;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+  .search input::placeholder{color:var(--muted)}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding:10px 2px 2px;-webkit-overflow-scrolling:touch}
+  .chips button{flex:0 0 auto;font-size:12.5px;padding:5px 11px;border-radius:999px;background:var(--surface2);color:var(--muted);font-weight:600}
+  .chips button.on{background:var(--ink);color:var(--bg)}
+  .foodlist{margin-top:10px;max-height:330px;overflow-y:auto}
+  .food{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+  .food:last-child{border-bottom:none}
+  .food:active{background:var(--surface2)}
+  .food .fname{font-weight:600;font-size:15px}
+  .food .fportion{font-size:12.5px;color:var(--muted)}
+  .food .fkcal{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14px;color:var(--muted);white-space:nowrap}
+  .addcustom{display:block;width:100%;text-align:center;padding:12px;font-size:14px;color:var(--accent);font-weight:600}
+
+  /* log del día */
+  .meal{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line)}
+  .meal:last-child{border-bottom:none}
+  .meal .time{font-family:var(--mono);font-size:12px;color:var(--muted);flex:0 0 auto}
+  .meal .mname{flex:1;font-size:15px}
+  .meal .mqty{color:var(--muted);font-size:13px}
+  .meal .mvals{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--muted);white-space:nowrap}
+  .meal .del{color:var(--muted);font-size:17px;padding:4px 6px;line-height:1}
+  .empty{padding:22px 14px;text-align:center;color:var(--muted);font-size:14px}
+
+  /* peso / pasos */
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .metric{padding:12px 14px}
+  .metric label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:6px}
+  .metric input{width:100%;border:none;background:transparent;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:22px;font-weight:600;padding:0}
+  .metric input::placeholder{color:var(--line)}
+
+  .copybtn{display:block;width:100%;margin-top:14px;padding:13px;border-radius:10px;background:var(--ink);color:var(--bg);font-weight:700;font-size:15px;text-align:center}
+  .copybtn.ok{background:var(--accent)}
+
+  /* semana */
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);font-weight:700}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  td:first-child{font-family:var(--sans);color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  tr.avg td{font-weight:700;background:var(--surface2)}
+  .hint{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);font-size:14px}
+  .hint.warn{background:var(--danger-soft)}
+  .hint b{display:block;margin-bottom:2px}
+
+  /* tabs */
+  nav{position:fixed;bottom:0;left:0;right:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+  .tabs{max-width:540px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 56px}
+  .tabs button{padding:14px 0 12px;font-size:14px;font-weight:700;color:var(--muted);border-top:2px solid transparent}
+  .tabs button.on{color:var(--ink);border-top-color:var(--accent)}
+
+  /* sheet (agregar cantidad / comida propia / ajustes) */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40;display:none}
+  .scrim.open{display:block}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--surface);border-radius:16px 16px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));max-width:540px;margin:0 auto;transform:translateY(105%);transition:transform .22s ease;border:1px solid var(--line);border-bottom:none}
+  .sheet.open{transform:translateY(0)}
+  .sheet h3{margin:0 0 2px;font-size:17px}
+  .sheet .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .qtyrow{display:flex;align-items:center;justify-content:center;gap:18px;margin:8px 0 14px}
+  .qtyrow button{width:52px;height:52px;border-radius:12px;background:var(--surface2);font-size:24px;font-weight:700}
+  .qtyrow .qty{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:34px;font-weight:700;min-width:90px;text-align:center}
+  .unittoggle{display:flex;gap:6px;justify-content:center;margin-bottom:14px}
+  .unittoggle button{font-size:13px;padding:6px 14px;border-radius:999px;background:var(--surface2);color:var(--muted);font-weight:600}
+  .unittoggle button.on{background:var(--ink);color:var(--bg)}
+  .gramrow{display:flex;justify-content:center;margin:8px 0 14px}
+  .gramrow input{width:130px;text-align:center;font-family:var(--mono);font-size:34px;font-weight:700;border:none;border-bottom:2px solid var(--line);background:transparent;padding:2px}
+  .preview{text-align:center;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px;margin-bottom:16px}
+  .sheet .confirm{display:block;width:100%;padding:14px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;text-align:center}
+  .formrow{margin-bottom:12px}
+  .formrow label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:4px}
+  .formrow input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg)}
+  .form2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .gear{font-size:18px;color:var(--muted)}
+  .note{font-size:12.5px;color:var(--muted);margin-top:10px;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="daynav">
+      <button id="prevDay" aria-label="Día anterior">‹</button>
+      <div class="date" id="dateLabel"></div>
+      <button id="nextDay" aria-label="Día siguiente">›</button>
+    </div>
+    <div class="remain">
+      <span class="big num" id="remainBig">1.800</span>
+      <span class="lbl" id="remainLbl">kcal disponibles</span>
+    </div>
+    <div class="bars">
+      <div class="bar">
+        <span class="tag">kcal</span>
+        <div class="track"><div class="fill kcal" id="barKcal" style="width:0%"></div></div>
+        <span class="val num" id="valKcal">0 / 1.800</span>
+      </div>
+      <div class="bar">
+        <span class="tag">proteína</span>
+        <div class="track"><div class="fill" id="barProt" style="width:0%"></div></div>
+        <span class="val num" id="valProt">0 / 150 g</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="viewHoy">
+    <div class="search">
+      <input id="q" type="search" placeholder="Buscar alimento… (pollo, marraqueta, palta)" autocomplete="off">
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="card foodlist" id="foodlist"></div>
+    <button class="addcustom" id="openCustom">+ Anotar algo que no está (nombre + kcal)</button>
+
+    <h2>Comido hoy</h2>
+    <div class="card" id="mealLog"></div>
+
+    <h2>Mediciones del día</h2>
+    <div class="metrics">
+      <div class="card metric">
+        <label for="weightIn">Peso (kg)</label>
+        <input id="weightIn" type="number" inputmode="decimal" step="0.1" min="40" max="150" placeholder="—">
+      </div>
+      <div class="card metric">
+        <label for="stepsIn">Pasos</label>
+        <input id="stepsIn" type="number" inputmode="numeric" step="100" min="0" max="60000" placeholder="—">
+      </div>
+    </div>
+
+    <button class="copybtn" id="copyDay">Copiar día para Norte</button>
+    <p class="note">Los datos viven en este dispositivo (localStorage). El respaldo es pegarle el resumen a Norte.</p>
+  </main>
+
+  <main id="viewSemana" hidden>
+    <h2>Últimos 7 días</h2>
+    <div class="card" style="overflow-x:auto">
+      <table id="weekTable"></table>
+    </div>
+    <div id="weekHint"></div>
+    <button class="copybtn" id="copyWeek">Copiar semana para Norte</button>
+  </main>
+</div>
+
+<nav>
+  <div class="tabs">
+    <button id="tabHoy" class="on">Hoy</button>
+    <button id="tabSemana">Semana</button>
+    <button id="openSettings" class="gear" aria-label="Ajustes">⚙</button>
+  </div>
+</nav>
+
+<div class="scrim" id="scrim"></div>
+
+<div class="sheet" id="sheetQty" role="dialog" aria-modal="true">
+  <h3 id="qtyName">Alimento</h3>
+  <p class="sub" id="qtySub"></p>
+  <div class="unittoggle" id="unitToggle" hidden>
+    <button id="unitPortion" class="on">por porción</button>
+    <button id="unitGrams">por gramos</button>
+  </div>
+  <div class="qtyrow" id="portionRow">
+    <button id="qtyMinus" aria-label="Menos">−</button>
+    <span class="qty num" id="qtyVal">1</span>
+    <button id="qtyPlus" aria-label="Más">+</button>
+  </div>
+  <div class="gramrow" id="gramRow" hidden>
+    <input id="gramsIn" type="number" inputmode="numeric" min="1" max="2000" value="100"> <span style="align-self:end;color:var(--muted);padding-bottom:8px">&nbsp;g</span>
+  </div>
+  <div class="preview" id="qtyPreview"></div>
+  <button class="confirm" id="qtyConfirm">Agregar</button>
+</div>
+
+<div class="sheet" id="sheetCustom" role="dialog" aria-modal="true">
+  <h3>Anotar comida propia</h3>
+  <p class="sub">Si no sabes las kcal, dile a Norte qué comiste y él lo estima. Ante la duda: anota el valor mayor.</p>
+  <div class="formrow"><label for="cName">Qué comiste</label><input id="cName" placeholder="ej: pastel de choclo, 1 plato"></div>
+  <div class="form2">
+    <div class="formrow"><label for="cKcal">kcal</label><input id="cKcal" type="number" inputmode="numeric" min="0" max="5000" placeholder="0"></div>
+    <div class="formrow"><label for="cProt">proteína (g)</label><input id="cProt" type="number" inputmode="numeric" min="0" max="300" placeholder="0"></div>
+  </div>
+  <div class="formrow" style="display:flex;gap:8px;align-items:center">
+    <input id="cSave" type="checkbox" style="width:auto"> <label for="cSave" style="margin:0;text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink)">Guardar en mi lista (categoría "Mías")</label>
+  </div>
+  <button class="confirm" id="customConfirm">Agregar al día</button>
+</div>
+
+<div class="sheet" id="sheetSettings" role="dialog" aria-modal="true">
+  <h3>Presupuesto</h3>
+  <p class="sub">Los números del protocolo. Se cambian solo con la regla de ajuste dominical.</p>
+  <div class="form2">
+    <div class="formrow"><label for="sKcal">kcal / día</label><input id="sKcal" type="number" inputmode="numeric" min="1500" max="4000"></div>
+    <div class="formrow"><label for="sProt">proteína (g)</label><input id="sProt" type="number" inputmode="numeric" min="60" max="300"></div>
+  </div>
+  <div class="formrow"><label for="sSteps">meta de pasos</label><input id="sSteps" type="number" inputmode="numeric" min="2000" max="30000"></div>
+  <p class="sub" style="margin-top:4px">Piso duro: 1.500 kcal. Bajo eso, no sin profesional.</p>
+  <button class="confirm" id="settingsConfirm">Guardar</button>
+</div>
+
+<script>
+'use strict';
+/* ============ datos: tabla de alimentos (valores estándar redondeados, ±10-15%) ============ */
+/* u: porción · k: kcal por porción · p: proteína por porción · g:[kcal,prot] por 100 g (opcional) */
+const FOODS = [
+ {c:'Proteínas', n:'Pechuga de pollo cruda',   u:'100 g',            k:110,p:23,  g:[110,23]},
+ {c:'Proteínas', n:'Pechuga de pollo cocida',  u:'100 g (1 palma)',  k:165,p:31,  g:[165,31]},
+ {c:'Proteínas', n:'Huevo',                    u:'1 unidad',         k:75, p:6.5},
+ {c:'Proteínas', n:'Atún en agua',             u:'1 lata drenada',   k:110,p:25,  g:[105,24]},
+ {c:'Proteínas', n:'Jurel al natural',         u:'½ lata drenada',   k:145,p:21,  g:[150,22]},
+ {c:'Proteínas', n:'Carne molida 5% cruda',    u:'100 g',            k:125,p:21,  g:[125,21]},
+ {c:'Proteínas', n:'Bistec de posta cocido',   u:'100 g (1 palma)',  k:190,p:29,  g:[190,29]},
+ {c:'Proteínas', n:'Salmón crudo',             u:'100 g',            k:200,p:20,  g:[200,20]},
+ {c:'Proteínas', n:'Merluza / pescado blanco', u:'100 g crudo',      k:80, p:17,  g:[80,17]},
+ {c:'Proteínas', n:'Jamón de pavo',            u:'1 lámina',         k:25, p:4},
+ {c:'Proteínas', n:'Quesillo',                 u:'100 g (½ unidad)', k:80, p:13,  g:[80,13]},
+ {c:'Proteínas', n:'Yogurt proteico',          u:'1 pote',           k:85, p:15},
+ {c:'Proteínas', n:'Lentejas/porotos cocidos', u:'1 taza',           k:240,p:16,  g:[120,8]},
+ {c:'Proteínas', n:'Proteína en polvo',        u:'1 scoop (30 g)',   k:120,p:24},
+ {c:'Carbos',    n:'Marraqueta',               u:'1 unidad entera',  k:270,p:9,   g:[270,9]},
+ {c:'Carbos',    n:'Hallulla',                 u:'1 unidad',         k:290,p:8,   g:[340,9]},
+ {c:'Carbos',    n:'Pan de molde integral',    u:'1 rebanada',       k:70, p:3},
+ {c:'Carbos',    n:'Arroz cocido',             u:'1 taza (1 puño)',  k:205,p:4,   g:[130,2.7]},
+ {c:'Carbos',    n:'Arroz crudo',              u:'100 g',            k:360,p:7,   g:[360,7]},
+ {c:'Carbos',    n:'Fideos cocidos',           u:'1 taza',           k:220,p:8,   g:[155,6]},
+ {c:'Carbos',    n:'Papa cocida',              u:'1 mediana',        k:130,p:3,   g:[87,2]},
+ {c:'Carbos',    n:'Camote cocido',            u:'100 g',            k:86, p:2,   g:[86,2]},
+ {c:'Carbos',    n:'Puré',                     u:'1 taza',           k:210,p:4},
+ {c:'Carbos',    n:'Avena',                    u:'½ taza (45 g)',    k:170,p:6,   g:[375,13]},
+ {c:'Carbos',    n:'Choclo',                   u:'1 taza',           k:130,p:5},
+ {c:'Carbos',    n:'Galleta de arroz',         u:'1 unidad',         k:35, p:1},
+ {c:'Grasas',    n:'Aceite',                   u:'1 cda',            k:120,p:0,   g:[880,0]},
+ {c:'Grasas',    n:'Palta',                    u:'½ chica (70 g)',   k:115,p:1,   g:[160,2]},
+ {c:'Grasas',    n:'Mantequilla',              u:'1 cdta',           k:35, p:0},
+ {c:'Grasas',    n:'Mayonesa',                 u:'1 cda',            k:90, p:0},
+ {c:'Grasas',    n:'Queso gauda/mantecoso',    u:'1 lámina',         k:90, p:6,   g:[360,25]},
+ {c:'Grasas',    n:'Nueces / maní',            u:'1 puñado (30 g)',  k:185,p:6,   g:[615,20]},
+ {c:'Grasas',    n:'Mermelada',                u:'1 cda',            k:50, p:0},
+ {c:'Grasas',    n:'Azúcar',                   u:'1 cdta',           k:16, p:0},
+ {c:'Fruta/Verd',n:'Plátano',                  u:'1 unidad',         k:105,p:1},
+ {c:'Fruta/Verd',n:'Manzana / pera',           u:'1 unidad',         k:90, p:0},
+ {c:'Fruta/Verd',n:'Naranja',                  u:'1 unidad',         k:65, p:1},
+ {c:'Fruta/Verd',n:'Uvas',                     u:'1 taza',           k:100,p:1},
+ {c:'Fruta/Verd',n:'Ensalada verde sin aliño', u:'1 porción',        k:30, p:1},
+ {c:'Fruta/Verd',n:'Tomate',                   u:'1 unidad',         k:22, p:1},
+ {c:'Fruta/Verd',n:'Verdura cocida',           u:'1 taza',           k:60, p:1},
+ {c:'Fruta/Verd',n:'Leche descremada',         u:'1 taza (200 ml)',  k:75, p:7},
+ {c:'Fruta/Verd',n:'Leche entera',             u:'1 taza (200 ml)',  k:125,p:6.5},
+ {c:'Calle',     n:'Empanada de pino',         u:'1 unidad',         k:500,p:15},
+ {c:'Calle',     n:'Empanada frita',           u:'1 unidad',         k:450,p:10},
+ {c:'Calle',     n:'Completo italiano',        u:'1 unidad',         k:550,p:15},
+ {c:'Calle',     n:'Churrasco italiano',       u:'1 unidad',         k:800,p:35},
+ {c:'Calle',     n:'Sopaipilla',               u:'1 unidad',         k:120,p:2},
+ {c:'Calle',     n:'Pizza',                    u:'1 trozo grande',   k:280,p:11},
+ {c:'Calle',     n:'Sushi envuelto',           u:'1 roll (8-10)',    k:500,p:18},
+ {c:'Calle',     n:'Papas fritas',             u:'porción indiv.',   k:400,p:5},
+ {c:'Calle',     n:'Cazuela',                  u:'1 plato',          k:400,p:30},
+ {c:'Calle',     n:'Porotos con riendas',      u:'1 plato',          k:450,p:18},
+ {c:'Calle',     n:'Bebida normal',            u:'lata 350 ml',      k:140,p:0},
+ {c:'Calle',     n:'Cerveza',                  u:'lata 350 ml',      k:145,p:1},
+ {c:'Calle',     n:'Vino',                     u:'1 copa (150 ml)',  k:125,p:0},
+ {c:'Calle',     n:'Piscola',                  u:'1 vaso',           k:200,p:0},
+ {c:'Calle',     n:'Pisco sour',               u:'1 vaso',           k:190,p:0},
+];
+const CATS = ['Todo','Proteínas','Carbos','Grasas','Fruta/Verd','Calle','Mías'];
+
+/* ============ estado ============ */
+const KEY = 'medidor-vicente-v1';
+const state = load();
+function load(){
+  try{
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && s.days) return s;
+  }catch(e){}
+  return { days:{}, custom:[], settings:{kcal:1800, prot:150, steps:12000} };
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+function day(key){
+  if(!state.days[key]) state.days[key] = {meals:[], weight:null, steps:null};
+  return state.days[key];
+}
+
+/* ============ fechas ============ */
+function dkey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+const todayKey = dkey(new Date());
+let currentKey = todayKey;
+const DIAS = ['dom','lun','mar','mié','jue','vie','sáb'];
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function labelFor(key){
+  const [y,m,d] = key.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  const base = DIAS[dt.getDay()]+' '+d+' '+MESES[m-1];
+  return key===todayKey ? 'hoy · '+base : base;
+}
+function shiftDay(delta){
+  const [y,m,d] = currentKey.split('-').map(Number);
+  const dt = new Date(y, m-1, d+delta);
+  const k = dkey(dt);
+  if (k > todayKey) return;
+  currentKey = k;
+  renderAll();
+}
+
+/* ============ formato ============ */
+const fmt = n => Math.round(n).toLocaleString('es-CL');
+const fmt1 = n => (Math.round(n*10)/10).toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:1});
+
+/* ============ render: header ============ */
+function renderHeader(){
+  const D = day(currentKey);
+  const kcal = D.meals.reduce((s,m)=>s+m.k,0);
+  const prot = D.meals.reduce((s,m)=>s+m.p,0);
+  const B = state.settings;
+  const remain = B.kcal - kcal;
+  const big = document.getElementById('remainBig');
+  const lbl = document.getElementById('remainLbl');
+  big.textContent = fmt(Math.abs(remain));
+  big.classList.toggle('over', remain < 0);
+  lbl.textContent = remain >= 0 ? 'kcal disponibles' : 'kcal PASADO del presupuesto';
+  document.getElementById('dateLabel').textContent = labelFor(currentKey);
+  document.getElementById('nextDay').disabled = currentKey === todayKey;
+
+  const bk = document.getElementById('barKcal');
+  bk.style.width = Math.min(100, kcal/B.kcal*100)+'%';
+  bk.classList.toggle('over', kcal > B.kcal);
+  document.getElementById('valKcal').textContent = fmt(kcal)+' / '+fmt(B.kcal);
+  const bp = document.getElementById('barProt');
+  bp.style.width = Math.min(100, prot/B.prot*100)+'%';
+  document.getElementById('valProt').textContent = fmt(prot)+' / '+fmt(B.prot)+' g';
+}
+
+/* ============ render: buscador ============ */
+let activeCat = 'Todo';
+function allFoods(){ return FOODS.concat(state.custom.map(f=>({...f, c:'Mías'}))); }
+function renderChips(){
+  const el = document.getElementById('chips');
+  el.innerHTML = '';
+  CATS.forEach(c=>{
+    if (c==='Mías' && state.custom.length===0) return;
+    const b = document.createElement('button');
+    b.textContent = c;
+    b.className = c===activeCat ? 'on' : '';
+    b.onclick = ()=>{ activeCat=c; renderChips(); renderFoods(); };
+    el.appendChild(b);
+  });
+}
+function norm(s){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function renderFoods(){
+  const q = norm(document.getElementById('q').value.trim());
+  const el = document.getElementById('foodlist');
+  el.innerHTML = '';
+  const list = allFoods().filter(f =>
+    (activeCat==='Todo' || f.c===activeCat) && (!q || norm(f.n).includes(q))
+  );
+  if (!list.length){
+    el.innerHTML = '<div class="empty">Nada con ese nombre. Anótalo abajo o pídeselo a Norte.</div>';
+    return;
+  }
+  list.forEach(f=>{
+    const b = document.createElement('button');
+    b.className = 'food';
+    b.innerHTML = '<span><span class="fname">'+f.n+'</span><br><span class="fportion">'+f.u+'</span></span>'
+      + '<span class="fkcal">'+fmt(f.k)+' kcal · '+fmt1(f.p)+' P</span>';
+    b.onclick = ()=>openQty(f);
+    el.appendChild(b);
+  });
+}
+
+/* ============ render: log del día ============ */
+function renderLog(){
+  const D = day(currentKey);
+  const el = document.getElementById('mealLog');
+  el.innerHTML = '';
+  if (!D.meals.length){
+    el.innerHTML = '<div class="empty">Sin registros todavía. Un día anotado al 80% vale más que uno perfecto sin anotar.</div>';
+    return;
+  }
+  D.meals.forEach((m,i)=>{
+    const row = document.createElement('div');
+    row.className = 'meal';
+    row.innerHTML = '<span class="time num">'+m.t+'</span>'
+      + '<span class="mname">'+m.n+' <span class="mqty">'+m.q+'</span></span>'
+      + '<span class="mvals">'+fmt(m.k)+' kcal · '+fmt1(m.p)+' P</span>';
+    const del = document.createElement('button');
+    del.className = 'del'; del.textContent = '×'; del.setAttribute('aria-label','Borrar '+m.n);
+    del.onclick = ()=>{ D.meals.splice(i,1); save(); renderAll(); };
+    row.appendChild(del);
+    el.appendChild(row);
+  });
+}
+
+/* ============ render: peso y pasos ============ */
+function renderMetrics(){
+  const D = day(currentKey);
+  document.getElementById('weightIn').value = D.weight ?? '';
+  document.getElementById('stepsIn').value = D.steps ?? '';
+}
+document.getElementById('weightIn').addEventListener('change', e=>{
+  const v = parseFloat(e.target.value);
+  day(currentKey).weight = isFinite(v) && v>0 ? v : null;
+  save();
+});
+document.getElementById('stepsIn').addEventListener('change', e=>{
+  const v = parseInt(e.target.value,10);
+  day(currentKey).steps = isFinite(v) && v>0 ? v : null;
+  save();
+});
+
+/* ============ sheet: cantidad ============ */
+let sheetFood = null, qty = 1, unitMode = 'portion';
+const scrim = document.getElementById('scrim');
+function openSheet(id){
+  scrim.classList.add('open');
+  document.getElementById(id).classList.add('open');
+}
+function closeSheets(){
+  scrim.classList.remove('open');
+  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('open'));
+}
+scrim.onclick = closeSheets;
+
+function openQty(f){
+  sheetFood = f; qty = 1; unitMode = 'portion';
+  document.getElementById('qtyName').textContent = f.n;
+  document.getElementById('qtySub').textContent = 'Porción: '+f.u+' = '+fmt(f.k)+' kcal / '+fmt1(f.p)+' g proteína';
+  document.getElementById('unitToggle').hidden = !f.g;
+  document.getElementById('unitPortion').classList.add('on');
+  document.getElementById('unitGrams').classList.remove('on');
+  document.getElementById('portionRow').hidden = false;
+  document.getElementById('gramRow').hidden = true;
+  document.getElementById('gramsIn').value = 100;
+  updateQtyUI();
+  openSheet('sheetQty');
+}
+function calc(){
+  if (unitMode==='grams' && sheetFood.g){
+    const g = parseFloat(document.getElementById('gramsIn').value)||0;
+    return {k: sheetFood.g[0]*g/100, p: sheetFood.g[1]*g/100, q: fmt(g)+' g'};
+  }
+  return {k: sheetFood.k*qty, p: sheetFood.p*qty, q: '×'+fmt1(qty)+' ('+sheetFood.u+')'};
+}
+function updateQtyUI(){
+  document.getElementById('qtyVal').textContent = fmt1(qty);
+  const r = calc();
+  document.getElementById('qtyPreview').textContent = '= '+fmt(r.k)+' kcal · '+fmt1(r.p)+' g proteína';
+}
+document.getElementById('qtyMinus').onclick = ()=>{ qty = Math.max(0.5, qty-0.5); updateQtyUI(); };
+document.getElementById('qtyPlus').onclick  = ()=>{ qty = Math.min(20, qty+0.5); updateQtyUI(); };
+document.getElementById('gramsIn').addEventListener('input', updateQtyUI);
+document.getElementById('unitPortion').onclick = ()=>{
+  unitMode='portion';
+  document.getElementById('unitPortion').classList.add('on');
+  document.getElementById('unitGrams').classList.remove('on');
+  document.getElementById('portionRow').hidden = false;
+  document.getElementById('gramRow').hidden = true;
+  updateQtyUI();
+};
+document.getElementById('unitGrams').onclick = ()=>{
+  unitMode='grams';
+  document.getElementById('unitGrams').classList.add('on');
+  document.getElementById('unitPortion').classList.remove('on');
+  document.getElementById('portionRow').hidden = true;
+  document.getElementById('gramRow').hidden = false;
+  updateQtyUI();
+};
+function now(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+document.getElementById('qtyConfirm').onclick = ()=>{
+  const r = calc();
+  if (r.k<=0 && r.p<=0){ closeSheets(); return; }
+  day(currentKey).meals.push({t:now(), n:sheetFood.n, q:r.q, k:Math.round(r.k), p:Math.round(r.p*10)/10});
+  save(); closeSheets(); renderAll();
+  document.getElementById('q').value=''; renderFoods();
+};
+
+/* ============ sheet: comida propia ============ */
+document.getElementById('openCustom').onclick = ()=>{
+  document.getElementById('cName').value='';
+  document.getElementById('cKcal').value='';
+  document.getElementById('cProt').value='';
+  document.getElementById('cSave').checked=false;
+  openSheet('sheetCustom');
+};
+document.getElementById('customConfirm').onclick = ()=>{
+  const n = document.getElementById('cName').value.trim();
+  const k = parseInt(document.getElementById('cKcal').value,10)||0;
+  const p = parseFloat(document.getElementById('cProt').value)||0;
+  if (!n || k<=0) return;
+  day(currentKey).meals.push({t:now(), n, q:'', k, p});
+  if (document.getElementById('cSave').checked){
+    state.custom.push({n, u:'1 porción', k, p});
+  }
+  save(); closeSheets(); renderAll(); renderChips(); renderFoods();
+};
+
+/* ============ sheet: ajustes ============ */
+document.getElementById('openSettings').onclick = ()=>{
+  document.getElementById('sKcal').value = state.settings.kcal;
+  document.getElementById('sProt').value = state.settings.prot;
+  document.getElementById('sSteps').value = state.settings.steps;
+  openSheet('sheetSettings');
+};
+document.getElementById('settingsConfirm').onclick = ()=>{
+  const k = parseInt(document.getElementById('sKcal').value,10);
+  const p = parseInt(document.getElementById('sProt').value,10);
+  const s = parseInt(document.getElementById('sSteps').value,10);
+  if (isFinite(k) && k>=1500) state.settings.kcal = k;
+  if (isFinite(p) && p>0) state.settings.prot = p;
+  if (isFinite(s) && s>0) state.settings.steps = s;
+  save(); closeSheets(); renderAll();
+};
+
+/* ============ semana ============ */
+function lastNDays(n){
+  const out = [];
+  const t = new Date();
+  for (let i=0;i<n;i++){
+    const d = new Date(t.getFullYear(), t.getMonth(), t.getDate()-i);
+    out.push(dkey(d));
+  }
+  return out;
+}
+function renderWeek(){
+  const keys = lastNDays(7);
+  const tbl = document.getElementById('weekTable');
+  let rows = '<tr><th>Día</th><th>kcal</th><th>Prot</th><th>Peso</th><th>Pasos</th></tr>';
+  let kSum=0,kN=0,wSum=0,wN=0;
+  keys.forEach(k=>{
+    const D = state.days[k];
+    const kcal = D ? D.meals.reduce((s,m)=>s+m.k,0) : 0;
+    const prot = D ? D.meals.reduce((s,m)=>s+m.p,0) : 0;
+    const logged = D && (D.meals.length || D.weight || D.steps);
+    if (D && D.meals.length){ kSum+=kcal; kN++; }
+    if (D && D.weight){ wSum+=D.weight; wN++; }
+    rows += '<tr><td>'+labelFor(k)+'</td>'
+      + '<td>'+(logged && D.meals.length ? fmt(kcal) : '—')+'</td>'
+      + '<td>'+(logged && D.meals.length ? fmt(prot) : '—')+'</td>'
+      + '<td>'+(D && D.weight ? fmt1(D.weight) : '—')+'</td>'
+      + '<td>'+(D && D.steps ? fmt(D.steps) : '—')+'</td></tr>';
+  });
+  rows += '<tr class="avg"><td>Promedio</td>'
+    + '<td>'+(kN ? fmt(kSum/kN) : '—')+'</td><td></td>'
+    + '<td>'+(wN ? fmt1(wSum/wN) : '—')+'</td><td></td></tr>';
+  tbl.innerHTML = rows;
+
+  const hint = document.getElementById('weekHint');
+  if (kN < 4 || wN < 2){
+    hint.innerHTML = '<div class="hint"><b>Datos insuficientes para ajustar</b>Se necesitan ≥4 días de comida y ≥2 pesajes en la semana. Sin registro no hay ajuste — la regla vive en el protocolo.</div>';
+  } else {
+    const avgK = kSum/kN;
+    const over = avgK > state.settings.kcal + 100;
+    hint.innerHTML = over
+      ? '<div class="hint warn"><b>Promedio sobre presupuesto ('+fmt(avgK)+' kcal)</b>Antes de tocar el plan: revisar aceite, líquidos y fines de semana — ahí se esconde el 80% de las fugas.</div>'
+      : '<div class="hint"><b>Promedio dentro del rango ('+fmt(avgK)+' kcal)</b>La decisión de ajuste es por tendencia de PESO de 2 semanas, no por un buen conteo. Domingo: revisión con Norte.</div>';
+  }
+}
+
+/* ============ copiar para Norte ============ */
+function dayText(k){
+  const D = state.days[k];
+  if (!D || (!D.meals.length && !D.weight && !D.steps)) return null;
+  const kcal = D.meals.reduce((s,m)=>s+m.k,0);
+  const prot = D.meals.reduce((s,m)=>s+m.p,0);
+  let out = 'Registro '+k+' (app)\n';
+  D.meals.forEach(m=>{ out += '- '+m.t+' · '+m.n+(m.q?' '+m.q:'')+' → '+fmt(m.k)+' kcal / '+fmt1(m.p)+' P\n'; });
+  out += 'Total: '+fmt(kcal)+' kcal (presupuesto '+fmt(state.settings.kcal)+') · '+fmt(prot)+' P (meta '+fmt(state.settings.prot)+')\n';
+  out += 'Peso: '+(D.weight ? fmt1(D.weight)+' kg' : '—')+' · Pasos: '+(D.steps ? fmt(D.steps) : '—');
+  return out;
+}
+async function copyText(btn, text){
+  try{
+    await navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = 'Copiado — pégaselo a Norte';
+    btn.classList.add('ok');
+    setTimeout(()=>{ btn.textContent = orig; btn.classList.remove('ok'); }, 2200);
+  }catch(e){
+    prompt('Copia manual:', text);
+  }
+}
+document.getElementById('copyDay').onclick = e=>{
+  const t = dayText(currentKey) || ('Registro '+currentKey+' (app)\nSin datos.');
+  copyText(e.target, t);
+};
+document.getElementById('copyWeek').onclick = e=>{
+  const parts = lastNDays(7).map(dayText).filter(Boolean).reverse();
+  copyText(e.target, parts.length ? parts.join('\n\n') : 'Semana sin registros.');
+};
+
+/* ============ tabs ============ */
+const tabHoy = document.getElementById('tabHoy'), tabSem = document.getElementById('tabSemana');
+tabHoy.onclick = ()=>{
+  tabHoy.classList.add('on'); tabSem.classList.remove('on');
+  document.getElementById('viewHoy').hidden = false;
+  document.getElementById('viewSemana').hidden = true;
+};
+tabSem.onclick = ()=>{
+  tabSem.classList.add('on'); tabHoy.classList.remove('on');
+  document.getElementById('viewHoy').hidden = true;
+  document.getElementById('viewSemana').hidden = false;
+  renderWeek();
+};
+
+/* ============ init ============ */
+document.getElementById('q').addEventListener('input', renderFoods);
+document.getElementById('prevDay').onclick = ()=>shiftDay(-1);
+document.getElementById('nextDay').onclick = ()=>shiftDay(1);
+function renderAll(){ renderHeader(); renderLog(); renderMetrics(); if(!document.getElementById('viewSemana').hidden) renderWeek(); }
+renderChips(); renderFoods(); renderAll();
+
+/* PWA: solo cuando corre servida por http(s); en file:// no hace nada */
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+
+</body>
+</html>
